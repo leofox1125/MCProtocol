@@ -133,7 +133,7 @@ void GetPlcMsg(char* NewMsg, int* RecvMsgLen)
 {
 	//wait.Lock(INFINITE);
 	int TimeOut = 0;
-	
+
 	do
 	{
 		TimeOut++;
@@ -143,12 +143,12 @@ void GetPlcMsg(char* NewMsg, int* RecvMsgLen)
 	if(!IsLock)
 	{
 		IsLock = TRUE;
-		*RecvMsgLen = MsgLen;
+	*RecvMsgLen = MsgLen;	
 
-		memcpy(NewMsg, mReadBuf, *RecvMsgLen);
+	memcpy(NewMsg, mReadBuf, *RecvMsgLen);
 
-		MsgLen = -1;
-		IsDataRecv = FALSE;
+	MsgLen = -1;
+	IsDataRecv = FALSE;
 		IsLock = FALSE;
 	}
 	
