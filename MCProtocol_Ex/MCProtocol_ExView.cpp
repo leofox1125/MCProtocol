@@ -44,6 +44,8 @@ BEGIN_MESSAGE_MAP(CMCProtocolExView, CFormView)
 	ON_BN_CLICKED(IDC_BUT_ONOFF, &CMCProtocolExView::OnBnClickedButOnoff)
 	ON_BN_CLICKED(IDC_MFCBUTTON2, &CMCProtocolExView::OnBnClickedMfcbutton2)
 	ON_BN_CLICKED(IDC_BUT_WRITE_DATA, &CMCProtocolExView::OnBnClickedButWriteData)
+	ON_BN_CLICKED(IDC_BUT_ONOFF2, &CMCProtocolExView::OnBnClickedButOnoff2)
+	ON_BN_CLICKED(IDC_BUT_ONOFF3, &CMCProtocolExView::OnBnClickedButOnoff3)
 END_MESSAGE_MAP()
 
 // CMCProtocolExView 建構/解構
@@ -79,7 +81,15 @@ void CMCProtocolExView::OnInitialUpdate()
 	GetParentFrame()->RecalcLayout();
 	ResizeParentToFit();
 
-	ESMV_CS_TCPIP_Client_Alloc();	
+	char TCP_Client_Version[20];
+	CString Lib_Version;
+	ESMV_CS_TCPIP_Client_Alloc(TCP_Client_Version);
+	Lib_Version.Format(L"TCP_Version : %s", TCP_Client_Version);
+	AfxMessageBox(Lib_Version);
+
+	int nTCPIP_Client = ESMV_CS_TCPIP_Client_Add_Client(this->GetSafeHwnd(), "192.168.100.1", 6000);;
+	ESMV_CS_TCPIP_Client_Set_Window_Pos(nTCPIP_Client, 55, 30);
+	Init_PLC_Com(nTCPIP_Client, TRUE);
 
 	CString csAddress;
 	Bit_List.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
@@ -152,16 +162,7 @@ void CMCProtocolExView::OnBnClickedButton2()
 void CMCProtocolExView::OnBnClickedButton4()
 {
 	// TODO: 在此加入控制項告知處理常式程式碼
-	CString csIP;
-	CString csPort;
-	char charIP[16];
-	int intPort = 0;
 	
-	GetDlgItem(IDC_IPADDRESS)->GetWindowText(csIP);
-	sprintf_s(charIP, "%ls", csIP);
-	GetDlgItem(IDC_PORT)->GetWindowText(csPort);
-	intPort = _ttoi(csPort);
-	Connect2Plc(charIP, intPort);
 }
 
 
@@ -460,33 +461,28 @@ void CMCProtocolExView::OnBnClickedMfcbutton1()
 	else
 	{
 		IsBitRefreshing = TRUE;		
-		SetTimer(BIT_REFRESH, 10, NULL);
+		SetTimer(BIT_REFRESH, 100, NULL);
 		((CMFCButton*)GetDlgItem(IDC_MFCBUTTON1))->SetFaceColor(RGB(0, 255, 0));
 	}
 
 	GetDlgItem(IDC_EDIT_BITDEVICE)->EnableWindow(!IsBitRefreshing);
 }
 
-
 void CMCProtocolExView::OnBnClickedButOnoff()
 {
 	// TODO: 在此加入控制項告知處理常式程式碼
 	CString csAddress;
 	char charAddress[6];
-	BOOL Signal = FALSE;
-	
+	BOOL Signal[1] = {TRUE};
+
 	GetDlgItem(IDC_EDIT_BITS_ADDRESS)->GetWindowText(csAddress);
 	sprintf_s(charAddress, "%ls", csAddress);	
 
-	if (ReadBitDevice(B, charAddress, 1, &Signal))
-	{
-		Signal = !Signal;
-		if(!WriteBitDevice(B, charAddress, 1, &Signal))
-			AfxMessageBox(L"Write Error!!!");
-	}
-	else
-		return;
+	if (!WriteBitDevice(B, charAddress, 1, Signal))
+		AfxMessageBox(L"Write Error!!!");	
 }
+
+
 
 
 void CMCProtocolExView::OnBnClickedMfcbutton2()
@@ -501,7 +497,7 @@ void CMCProtocolExView::OnBnClickedMfcbutton2()
 	else
 	{
 		IsWordRefreshing = TRUE;
-		SetTimer(WORD_REFRESH, 10, NULL);
+		SetTimer(WORD_REFRESH, 100, NULL);
 		((CMFCButton*)GetDlgItem(IDC_MFCBUTTON2))->SetFaceColor(RGB(0, 255, 0));
 	}
 
@@ -527,5 +523,27 @@ void CMCProtocolExView::OnBnClickedButWriteData()
 	int StrLength = strlen(charData);
 
 	if(!WriteWordDevice(W, charAddress, StrLength, charData))
+		AfxMessageBox(L"Write Error!!!");
+}
+
+
+void CMCProtocolExView::OnBnClickedButOnoff2()
+{
+	// TODO: 在此加入控制項告知處理常式程式碼
+	
+}
+
+
+void CMCProtocolExView::OnBnClickedButOnoff3()
+{
+	// TODO: 在此加入控制項告知處理常式程式碼
+	CString csAddress;
+	char charAddress[6];
+	BOOL Signal[1] = { FALSE };
+
+	GetDlgItem(IDC_EDIT_BITS_ADDRESS)->GetWindowText(csAddress);
+	sprintf_s(charAddress, "%ls", csAddress);
+
+	if (!WriteBitDevice(B, charAddress, 1, Signal))
 		AfxMessageBox(L"Write Error!!!");
 }

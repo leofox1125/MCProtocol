@@ -39,10 +39,10 @@
     <ClInclude Include="pch.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
-    <ClInclude Include="ESMV_CS_TCPIP_Client_Lib.h">
+    <ClInclude Include="MCProtocol_Com.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
-    <ClInclude Include="MCProtocol_Com.h">
+    <ClInclude Include="ESMV_CS_TCPIP_Client_Lib.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
   </ItemGroup>

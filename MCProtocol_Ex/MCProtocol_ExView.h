@@ -55,6 +55,8 @@ public:
 	afx_msg void OnBnClickedMfcbutton2();
 	CListCtrl Word_List;
 	afx_msg void OnBnClickedButWriteData();
+	afx_msg void OnBnClickedButOnoff2();
+	afx_msg void OnBnClickedButOnoff3();
 };
 
 #ifndef _DEBUG  // 對 MCProtocol_ExView.cpp 中的版本進行偵錯

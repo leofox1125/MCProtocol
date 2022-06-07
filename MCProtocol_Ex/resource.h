@@ -29,7 +29,9 @@
 #define IDC_EDIT4                       1017
 #define IDC_EDIT_WORDDEVICE             1018
 #define IDC_BUT_BIT_REFRESH             1019
+#define IDC_BUT_ONOFF2                  1019
 #define IDC_BUT_WORD_REFRESH            1020
+#define IDC_BUT_ONOFF3                  1020
 #define IDC_BUT_WRITE_DATA              1021
 #define IDC_MFCBUTTON1                  1022
 #define IDC_MFCBUTTON2                  1023

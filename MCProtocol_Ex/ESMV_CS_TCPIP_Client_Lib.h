@@ -2,8 +2,6 @@
 	#define DLLEXPORT extern "C" __declspec(dllexport)
 #endif
 
-#include "pch.h"   
-
 
 #ifndef ESMV_CS_TCPIP_CLIENT_LIB_DEF
 
@@ -33,7 +31,7 @@
 
 		//有關於資源配置, 設定的函式
 		//DLLEXPORT void	ESMV_CS_TCPIP_Client_Alloc(int Msg_Setting);
-		DLLEXPORT void	ESMV_CS_TCPIP_Client_Alloc();
+		DLLEXPORT void	ESMV_CS_TCPIP_Client_Alloc(char* TCP_Client_Version);
 		DLLEXPORT void	ESMV_CS_TCPIP_Client_Close();
 		DLLEXPORT int	ESMV_CS_TCPIP_Client_Add_Client(HWND hDispWnd, char* IP_Add, int   PortNo);
 

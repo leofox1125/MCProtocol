@@ -11,10 +11,7 @@ enum Device_Header
 	W
 };
 
-BOOL Connect2Plc(char* IPAddress, int PortNum);
-
-BOOL Init_PLC_Com(int ClientIndex);
-void Close_PLC_Com();
+BOOL Init_PLC_Com(int ClientIndex, BOOL CreateLog);
 
 BOOL ReadBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength, BOOL* Result);
 BOOL ReadWordDevice(Device_Header Device_Type, char* Start_Index, int CharLength, char* Result);

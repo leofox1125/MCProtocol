@@ -2,147 +2,16 @@
 #include <ws2tcpip.h> 
 #include "MCProtocol_Com.h"
 
+#define BUF_SIZE 2000
+
 int ClientIndex_Plc = 0;
-BOOL StartRecv = FALSE;
+BOOL IsLogOn = FALSE;
 
 
-#pragma region variable_for_socket
-#define BUF_SIZE 1000
-SOCKET mSocketClient = NULL;
-char*   mReadBuf;
-char*   mSendBuf;
-BOOL bRunning = FALSE;
-BOOL IsDataRecv = FALSE;
-int MsgLen = -1;
-CSemaphore mutex;
-CSingleLock wait(&mutex);
-#pragma endregion
-
-
-#pragma region function_for_socket
-UINT Thread_Recv_Socket_Msg(LPVOID param)
-{
-	while (bRunning == TRUE)
-	{		
-		wait.Lock(INFINITE);
-
-		IsDataRecv = FALSE;
-
-		//接收客戶端數據
-		ZeroMemory(mReadBuf, BUF_SIZE);
-		//第一個參數：指向一塊準備用0來填充的內存區域的開始地址。
-		//第二個參數：準備用0來填充的內存區域的大小，按字節來計算。
-
-		MsgLen = recv(mSocketClient, mReadBuf, BUF_SIZE, 0);  //從一個套接口接收數據
-		//第一個參數：一個標識已連接套接口的描述字
-		//第二個參數：用於接收數據的緩衝區。
-		//第三個參數：緩衝區長度
-		//第四個參數：指定調用方式
-
-		if (SOCKET_ERROR == MsgLen)
-		{
-			closesocket(mSocketClient);	//關閉套接字		
-			WSACleanup();			//釋放套接字資源;
-			bRunning = FALSE;
-			break;
-		}
-
-		if (MsgLen > 0)
-		{
-			FILE* fp1;
-			fopen_s(&fp1, "D:\\Test.txt", "a");
-
-			fprintf(fp1, "Buffer Receive------------\n");
-
-			for (int i = 0; i < MsgLen; i++)
-				fprintf(fp1, "%X", mReadBuf[i]);
-
-			fprintf(fp1, "\n");
-			fclose(fp1);
-
-			IsDataRecv = TRUE;						
-		}
-
-		wait.Unlock();
-		Sleep(100);
-	}
-
-	return 0;
-}
-
-BOOL Connect2Plc(char* IPAddress, int PortNum)
-{
-	SOCKADDR_IN mSocketAddress;
-	WORD wdversion = MAKEWORD(1, 1);
-	WSADATA			wsdata;
-
-	//初始化套結字動態庫//MAKEWORD的第一個參數爲低位字節，第二個參數爲高位字節  
-	if (WSAStartup(wdversion, &wsdata) != 0)
-		return FALSE;
-
-	//LOBYTE（）取得16進制數最低位；HIBYTE（）取得16進制數最高（最左邊）那個字節的內容    
-	if (LOBYTE(wsdata.wVersion) != 1 || HIBYTE(wsdata.wVersion) != 1)
-	{
-		WSACleanup();
-		return FALSE;
-	}	
-
-	mSocketAddress.sin_family = AF_INET; //sin_family表示協議簇，AF_INET:使用IPv4 , AF_INET6:使用IPv6
-	mSocketAddress.sin_port = htons(PortNum);
-	inet_pton(AF_INET, IPAddress, &mSocketAddress.sin_addr);
-
-	mSocketClient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);	
-
-	//INVALID_SOCKET就是“無效套接字”的意思
-	if (INVALID_SOCKET == mSocketClient)
-	{
-		WSACleanup();//釋放套接字資源;
-		return FALSE;
-	}
-
-	int ret = connect(mSocketClient, (SOCKADDR*)&mSocketAddress, sizeof(SOCKADDR));
-
-	if (ret != SOCKET_ERROR)
-	{
-		mReadBuf = new char[BUF_SIZE];
-		mSendBuf = new char[BUF_SIZE];
-		bRunning = TRUE;
-		AfxBeginThread(Thread_Recv_Socket_Msg, NULL, THREAD_PRIORITY_NORMAL);
-		return TRUE;
-	}
-	else
-		return FALSE;
-}
-
-int SendMsg2Plc(char* Send_msg, int MsgLen)
-{
-	if(mSocketClient != NULL)
-		return send(mSocketClient, Send_msg, MsgLen, 0);
-}
-
-BOOL CheckPlcMsg()
-{
-	return IsDataRecv;
-}
-
-void GetPlcMsg(char* NewMsg, int* RecvMsgLen)
-{
-	wait.Lock(INFINITE);
-
-	*RecvMsgLen = MsgLen;	
-
-	memcpy(NewMsg, mReadBuf, *RecvMsgLen);
-
-	MsgLen = -1;
-	IsDataRecv = FALSE;
-	
-	wait.Unlock();
-}
-#pragma endregion
-
-BOOL Init_PLC_Com(int ClientIndex)
+BOOL Init_PLC_Com(int ClientIndex, BOOL CreateLog)
 {
 	ClientIndex_Plc = ClientIndex;
+	IsLogOn = CreateLog;
 
 	if (!ESMV_CS_TCPIP_Client_Is_Connect(ClientIndex_Plc))
 	{
@@ -151,11 +20,6 @@ BOOL Init_PLC_Com(int ClientIndex)
 	}
 
 	return TRUE;
-};
-
-void Close_PLC_Com()
-{
-	ESMV_CS_TCPIP_Client_Free_Channel(ClientIndex_Plc);
 };
 
 int HexStr2DecNum(char* HexStr) 
@@ -237,12 +101,55 @@ void SetCommonMsg(char* MsgPacket)
 	MsgPacket[9] = 0x01;
 	MsgPacket[10] = 0x00;	
 };
+void LogSocketMsg(char* Msg, int MsgLen, BOOL IsReceive) //true receive, false send
+{
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+
+	FILE* fp1;
+	char FileName[200];
+	sprintf(FileName, "D://MC_Raw_Log%d%d%d.txt", st.wYear, st.wMonth, st.wDay);
+	fopen_s(&fp1, FileName, "a");
+
+	if(IsReceive)
+		fprintf(fp1, "%02d:%02d:%02d:%03d  Receive: ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);		
+	else
+		fprintf(fp1, "%02d:%02d:%02d:%03d  Send: ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);		
+
+	char Mask1 = 0b00000001;
+	double DecNumDouble = 0;
+	for (int i = 0; i < MsgLen; i++) //6A
+	{
+		DecNumDouble = 0;
+		Mask1 = 0b00000001;
+		for (int j = 0; j < 8; j++)
+		{
+			if (Msg[i] & Mask1)
+				DecNumDouble += pow(2, j);
+			Mask1 = Mask1 << 1;
+		}
+
+		if(DecNumDouble < 16)
+			fprintf(fp1, "0%X ", (int)DecNumDouble);
+		else
+			fprintf(fp1, "%X ", (int)DecNumDouble);
+	}
+	fprintf(fp1, "\n");
+	fclose(fp1);
+}
 
 BOOL ReadBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength, BOOL* Result)
 {
+	char Receive_Msg[BUF_SIZE];
+
+	while (ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc))
+	{
+		ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, Receive_Msg);
+		Sleep(100);
+	}
+
 #pragma region Send Message
 	char SendMsg[BUF_SIZE];
-	char Receive_Msg[BUF_SIZE];
 	int Command_Len = 21;
 	char TmpChar[] = "000000";
 	int TmpDataLength = 0;
@@ -281,7 +188,7 @@ BOOL ReadBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength, 
 		return FALSE;
 
 	//-----Device code-----
-	//CString Res;	
+	CString Res;	
 	if(Device_Type == B)
 		SendMsg[18] = 0xA0;
 
@@ -306,33 +213,41 @@ BOOL ReadBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength, 
 	for (int i = 0; i < 2; i++)
 		SendMsg[19 + i] = HexStr2DecNum(TmpChar + 2 - 2 * i);
 
-	if(SendMsg2Plc(SendMsg, Command_Len) == SOCKET_ERROR)
+	if (ESMV_CS_TCPIP_Client_Send_Msg(ClientIndex_Plc, SendMsg, Command_Len) != -1)
+	{
+		if (IsLogOn)
+			LogSocketMsg(SendMsg, Command_Len, FALSE);
+	}
+	else
 		return FALSE;
 #pragma endregion
 
 #pragma region Receive Message
 	int TimeOut = 0;
+	//Sleep(2000);
 
 	do 
 	{
 		TimeOut ++ ;
 		Sleep(10);
-	} while (TimeOut <= 200 && !CheckPlcMsg());
+	} while (TimeOut <= 200 && !ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc));
 
 	int RecvMsgLen = 0;
 	char RecvMsg[BUF_SIZE];
 
+	//memset(RecvMsg, '\0', BUF_SIZE);
+
 	if (TimeOut > 200)
 		return FALSE;
 	else
-		GetPlcMsg(RecvMsg, &RecvMsgLen);
-
-	/*Res.Format(L"MsgLen = %X", RecvMsg);
-	AfxMessageBox(Res);*/
+	{
+		RecvMsgLen = ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, RecvMsg);
+		if (IsLogOn)
+			LogSocketMsg(RecvMsg, RecvMsgLen, TRUE);
+	}
 
 	if (RecvMsg[9] != 0x00 || RecvMsg[10] != 0x00) //End code必須為0,傳回的資料才是正確的
 		return FALSE;
-
 
 	double RecvBitLen = 0;
 
@@ -393,9 +308,16 @@ BOOL ReadBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength, 
 
 BOOL ReadWordDevice(Device_Header Device_Type, char* Start_Index, int CharLength, char* Result)
 {
+	char Receive_Msg[BUF_SIZE];
+
+	while (ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc))
+	{
+		ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, Receive_Msg);
+		Sleep(100);
+	}
+
 #pragma region Send Message
 	char SendMsg[BUF_SIZE];
-	char Receive_Msg[BUF_SIZE];
 	int Command_Len = 21;
 	char TmpChar[] = "000000";
 	int TmpDataLength = 0;
@@ -472,7 +394,12 @@ BOOL ReadWordDevice(Device_Header Device_Type, char* Start_Index, int CharLength
 	for (int i = 0; i < 2; i++)
 		SendMsg[19 + i] = HexStr2DecNum(TmpChar + 2 - 2 * i);
 
-	if (SendMsg2Plc(SendMsg, Command_Len) == SOCKET_ERROR)
+	if (ESMV_CS_TCPIP_Client_Send_Msg(ClientIndex_Plc, SendMsg, Command_Len) != -1)
+	{
+		if (IsLogOn)
+			LogSocketMsg(SendMsg, Command_Len, FALSE);
+	}
+	else
 		return FALSE;
 #pragma endregion
 
@@ -483,7 +410,7 @@ BOOL ReadWordDevice(Device_Header Device_Type, char* Start_Index, int CharLength
 	{
 		TimeOut++;
 		Sleep(10);
-	} while (TimeOut <= 200 && !CheckPlcMsg());
+	} while (TimeOut <= 200 && !ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc));
 
 	int RecvMsgLen = 0;
 	char RecvMsg[BUF_SIZE];
@@ -491,7 +418,11 @@ BOOL ReadWordDevice(Device_Header Device_Type, char* Start_Index, int CharLength
 	if (TimeOut > 200)
 		return FALSE;
 	else
-		GetPlcMsg(RecvMsg, &RecvMsgLen);
+	{
+		RecvMsgLen = ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, RecvMsg);
+		if (IsLogOn)
+			LogSocketMsg(RecvMsg, RecvMsgLen, TRUE);
+	}
 
 	/*Res.Format(L"MsgLen = %X", RecvMsg);
 	AfxMessageBox(Res);*/
@@ -538,9 +469,16 @@ BOOL ReadWordDevice(Device_Header Device_Type, char* Start_Index, int CharLength
 
 BOOL WriteBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength, BOOL* Data)
 {
+	char Receive_Msg[BUF_SIZE];
+
+	while (ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc))
+	{
+		ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, Receive_Msg);
+		Sleep(100);
+	}
+
 #pragma region Send Message
 	char SendMsg[BUF_SIZE];
-	char Receive_Msg[BUF_SIZE];
 	int Command_Len = 21;
 	char TmpChar[] = "000000";
 	int TmpDataLength = 0;
@@ -654,26 +592,36 @@ BOOL WriteBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength,
 		}
 	}
 
-	if (SendMsg2Plc(SendMsg, Command_Len) == SOCKET_ERROR)
-		return FALSE;	
+	if (ESMV_CS_TCPIP_Client_Send_Msg(ClientIndex_Plc, SendMsg, Command_Len) != -1)
+	{
+		if (IsLogOn)
+			LogSocketMsg(SendMsg, Command_Len, FALSE);
+	}	
+	else
+		return FALSE;
 #pragma endregion
 
 #pragma region Receive Message
 	int TimeOut = 0;
+	int RecvMsgLen = 0;
+	char RecvMsg[BUF_SIZE];
+
+	//Sleep(100);
 
 	do
 	{
 		TimeOut++;
 		Sleep(10);
-	} while (TimeOut <= 200 && !CheckPlcMsg());
-
-	int RecvMsgLen = 0;
-	char RecvMsg[BUF_SIZE];
+	} while (TimeOut <= 200 && !ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc));
 
 	if (TimeOut > 200)
 		return FALSE;
 	else
-		GetPlcMsg(RecvMsg, &RecvMsgLen);
+	{
+		RecvMsgLen = ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, RecvMsg);
+		if (IsLogOn)
+			LogSocketMsg(RecvMsg, RecvMsgLen, TRUE);
+	}
 
 	//確認回覆結果是否正確
 	if (RecvMsgLen != 11)
@@ -722,9 +670,17 @@ BOOL WriteBitDevice(Device_Header Device_Type, char* Start_Index, int BitLength,
 
 BOOL WriteWordDevice(Device_Header Device_Type, char* Start_Index, int CharLength, char* Data)
 {
+	
+	char Receive_Msg[BUF_SIZE];
+
+	while (ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc))
+	{
+		ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, Receive_Msg);
+		Sleep(100);
+	};
+
 #pragma region Send Message
 	char SendMsg[BUF_SIZE];
-	char Receive_Msg[BUF_SIZE];
 	int Command_Len = 0;
 	char TmpChar[] = "000000";
 	int TmpDataLength = 0;
@@ -820,7 +776,7 @@ BOOL WriteWordDevice(Device_Header Device_Type, char* Start_Index, int CharLengt
 
 	if (CharLength % 2 == 1)
 	{
-		char* Original_Data =  new char[CharLength + 1];
+		/*char* Original_Data =  new char[CharLength + 1];
 				
 		if (ReadWordDevice(W, Start_Index, CharLength + 1, Original_Data))
 		{
@@ -840,29 +796,40 @@ BOOL WriteWordDevice(Device_Header Device_Type, char* Start_Index, int CharLengt
 				Original_Data = NULL;
 			}
 			return FALSE;
-		}		
+		}		*/
+
+		AfxMessageBox(L"Even number of char is allowed !!!");
+		return FALSE;
 	}	
-	
-	if (SendMsg2Plc(SendMsg, Command_Len) == SOCKET_ERROR)
+
+	if (ESMV_CS_TCPIP_Client_Send_Msg(ClientIndex_Plc, SendMsg, Command_Len) != -1)
+	{
+		if (IsLogOn)
+			LogSocketMsg(SendMsg, Command_Len, FALSE);
+	}	
+	else
 		return FALSE;
 #pragma endregion
 
 #pragma region Receive Message
 	int TimeOut = 0;
+	int RecvMsgLen = 0;
+	char RecvMsg[BUF_SIZE];
 
 	do
 	{
 		TimeOut++;
 		Sleep(10);
-	} while (TimeOut <= 200 && !CheckPlcMsg());
-
-	int RecvMsgLen = 0;
-	char RecvMsg[BUF_SIZE];
+	} while (TimeOut <= 200 && !ESMV_CS_TCPIP_Client_Check_New_Msg(ClientIndex_Plc));
 
 	if (TimeOut > 200)
 		return FALSE;
 	else
-		GetPlcMsg(RecvMsg, &RecvMsgLen);
+	{
+		RecvMsgLen = ESMV_CS_TCPIP_Client_Receive_Msg(ClientIndex_Plc, RecvMsg);
+		if (IsLogOn)
+			LogSocketMsg(RecvMsg, RecvMsgLen, TRUE);
+	}
 
 	//確認回覆結果是否正確
 	if (RecvMsgLen != 11)
